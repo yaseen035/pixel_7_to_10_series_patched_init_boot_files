@@ -3,6 +3,26 @@ import subprocess
 import sys
 import time
 
+def get_adb_build_id():
+    out = run(["adb", "shell", "getprop", "ro.build.id"])
+    build_id = out.strip().splitlines()[-1].strip() if out.strip() else ""
+    return build_id
+
+
+def find_build_folder(device_dir, build_id):
+    for d in os.listdir(device_dir):
+        if os.path.isdir(os.path.join(device_dir, d)) and d.lower() == build_id.lower():
+            return d
+    return None
+
+
+def read_latest_txt(device_dir):
+    path = os.path.join(device_dir, "latest.txt")
+    if os.path.isfile(path):
+        with open(path) as f:
+            return f.read().strip()
+    return None
+
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 MAGISK_APK = os.path.join(REPO_ROOT, "Magisk-v30.7.apk")
 
@@ -44,7 +64,11 @@ def wait_adb_device():
 
 def wait_fastboot_device():
     print("\nWaiting for device (fastboot)...")
-    run(["fastboot", "wait-for-device"], capture=False)
+    while True:
+        out = run(["fastboot", "devices"])
+        if out.strip():
+            break
+        time.sleep(1)
 
 
 def install_magisk():
@@ -90,8 +114,11 @@ def main():
     check_tool("adb")
     check_tool("fastboot")
 
+    build_id = None
+
     if is_fastboot_mode():
         print("[INFO] Device already in fastboot mode. Skipping adb steps.")
+        print("[WARN] Can't read exact build ID via adb in this mode. Will use latest.txt if available.")
     else:
         wait_adb_device()
 
@@ -99,6 +126,12 @@ def main():
             print("[INFO] Magisk already installed. Skipping install step.")
         else:
             install_magisk()
+
+        build_id = get_adb_build_id()
+        if build_id:
+            print(f"[INFO] Current build ID (adb): {build_id}")
+        else:
+            print("[WARN] Could not read build ID via adb.")
 
         run(["adb", "reboot", "bootloader"], capture=False)
 
@@ -121,14 +154,23 @@ def main():
     if not os.path.isdir(device_dir):
         sys.exit(f"[ERROR] Folder not found: {device_dir}")
 
-    builds = sorted([
-        d for d in os.listdir(device_dir)
-        if os.path.isdir(os.path.join(device_dir, d))
-    ])
-    if not builds:
-        sys.exit(f"[ERROR] No build folders found in {device_dir}")
+    build = None
+    if build_id:
+        build = find_build_folder(device_dir, build_id)
+        if not build:
+            print(f"[WARN] No folder matches build ID '{build_id}'.")
 
-    build = builds[-1]
+    if not build:
+        latest = read_latest_txt(device_dir)
+        if latest:
+            build = find_build_folder(device_dir, latest)
+        if not build:
+            sys.exit(
+                "[ERROR] Could not determine correct build. "
+                f"Add a 'latest.txt' file in {device_dir} with the correct build folder name, "
+                "or boot the device normally so adb can read the build ID."
+            )
+
     build_dir = os.path.join(device_dir, build)
     print(f"\nSelected build: {build}")
 
