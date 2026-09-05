@@ -6,6 +6,7 @@ import time
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 PLATFORM_TOOLS_DIR = os.path.join(REPO_ROOT, "platform-tools")
 INIT_BOOTS_DIR = os.path.join(REPO_ROOT, "init_boots")
+MODEMS_DIR = os.path.join(REPO_ROOT, "modems")
 MAGISK_APK = os.path.join(INIT_BOOTS_DIR, "Magisk-v30.7.apk")
 
 CODENAME_MAP = {
@@ -114,6 +115,76 @@ def is_fastboot_mode():
     return bool(out.strip())
 
 
+def find_7z():
+    from shutil import which
+    exe = which("7z") or which("7z.exe")
+    if exe:
+        return exe
+    candidates = [
+        os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "7-Zip", "7z.exe"),
+        os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "7-Zip", "7z.exe"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def ensure_7z_installed():
+    exe = find_7z()
+    if exe:
+        return exe
+
+    print("[INFO] '7z' not found. Installing via winget...")
+    run([
+        "winget", "install", "--id", "7zip.7zip", "-e", "--silent",
+        "--accept-source-agreements", "--accept-package-agreements",
+    ], capture=False)
+
+    exe = find_7z()
+    if not exe:
+        sys.exit("[ERROR] Failed to install 7-Zip automatically. Please install it manually from https://www.7-zip.org/")
+    print("[OK] 7-Zip installed.")
+    return exe
+
+
+def extract_modem_image(modem_dir):
+    modem_img = os.path.join(modem_dir, "modem.img")
+    modem_zip = os.path.join(modem_dir, "modem.zip")
+
+    if os.path.isfile(modem_img):
+        return modem_img
+    if not os.path.isfile(modem_zip):
+        return None
+
+    seven_zip = ensure_7z_installed()
+    print(f"\nExtracting modem.img from {modem_zip}...")
+    run([seven_zip, "x", modem_zip, f"-o{modem_dir}", "-y"], capture=False)
+
+    if not os.path.isfile(modem_img):
+        sys.exit(f"[ERROR] modem.img not found after extracting {modem_zip}")
+    print("[OK] modem.img extracted.")
+    return modem_img
+
+
+def flash_modem(folder_name):
+    modem_dir = os.path.join(MODEMS_DIR, folder_name)
+    if not os.path.isdir(modem_dir):
+        print(f"[WARN] No modem folder found at {modem_dir}. Skipping modem flash.")
+        return
+
+    modem_img = extract_modem_image(modem_dir)
+    if not modem_img:
+        print(f"[WARN] No modem.img or modem.zip found in {modem_dir}. Skipping modem flash.")
+        return
+
+    print("\nFlashing modem...")
+    out = run([tool_path("fastboot"), "flash", "modem", modem_img])
+    if "OKAY" not in out and "Finished" not in out and "error" in out.lower():
+        sys.exit("[ERROR] Modem flash failed.")
+    print("[OK] Modem flash complete.")
+
+
 def is_magisk_installed():
     out = run([tool_path("adb"), "shell", "pm", "list", "packages", "com.topjohnwu.magisk"])
     return "com.topjohnwu.magisk" in out
@@ -219,6 +290,13 @@ def main():
         sys.exit("[ERROR] Flash failed. Device not rebooted.")
 
     print("[OK] Flash complete.")
+
+    modem_choice = input("\nFlash downgraded modem? (y/n): ").strip().lower()
+    if modem_choice == "y":
+        flash_modem(folder_name)
+    else:
+        print("[INFO] Skipping modem flash.")
+
     input("\nPress Enter to reboot device...")
     run([tool_path("fastboot"), "reboot"], capture=False)
     print("\nDone. Device rebooting.")
