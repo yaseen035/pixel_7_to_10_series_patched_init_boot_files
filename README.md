@@ -1,4 +1,4 @@
-# Pixel 7 to 9 Series Patched init_boot Files
+# Pixel 7 to 10 Series Patched init_boot Files
 
 Welcome! This repository contains Magisk-patched `init_boot` files for the Google Pixel 7, 8, and 9 series. You can use these files to easily root your device.
 
@@ -7,7 +7,7 @@ Welcome! This repository contains Magisk-patched `init_boot` files for the Googl
 * **Pixel 7 Series:** Pixel 7 (panther), Pixel 7 Pro (cheetah), Pixel 7a (lynx)
 * **Pixel 8 Series:** Pixel 8 (shiba), Pixel 8 Pro (husky), Pixel 8a (akita)
 * **Pixel 9 Series:** Pixel 9 (tokay), Pixel 9 Pro (caiman), Pixel 9 Pro XL (komodo), Pixel 9 Pro Fold (comet), Pixel 9a (tegu)
-
+* **Pixel 10 Series:** Pixel 10 (frankel), Pixel 10 Pro (blazer), Pixel 10 Pro XL (mustang), Pixel 10 Pro Fold (rango)
 ## Requirements
 
 * An Unlocked Bootloader.
